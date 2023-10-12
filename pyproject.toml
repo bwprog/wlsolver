@@ -1,0 +1,112 @@
+[project]
+name = 'wlsolver'
+description = 'A cli tool to solve a word list puzzle.'
+readme = 'README.md'
+license = {file = 'LICENSE'}
+# Support Python 3.11+.
+requires-python = '>=3.11'
+dynamic = [
+  'version',
+]
+dependencies = [
+  'rich>=13.6.0',
+  'typer>=0.9.0',
+]
+
+
+[project.optional-dependencies]
+dev = [
+  'ruff',
+]
+tests = [
+  'pytest>=7.4.2',
+]
+
+
+[tool.ruff]
+# Increase the maximum line length to 100 characters.
+line-length = 120
+# enforced rules
+select = [
+  'A',      # flake8-builtins
+  'ANN',    # flake8-annotations
+  'ASYNC',  # flake8-ASYNC
+  'B',      # flake8-bugbear
+  'C4',     # flake8-comprehensions
+  'C90',    # mccabe complexity
+  'COM',    # flake8-commas
+  'D',      # pydocstyle
+  'DTZ',    # flake8-datetimez
+  'E',      # pycodestyle - Error
+  'EM',     # flake8-errmsg
+  'F',      # pyflakes
+  'FURB',   # refurb
+  'I',      # isort
+  'ICN',    # flake8-import-conventions
+  'ISC',    # flake8-implicit-str-concat
+  'FLY',    # flynt
+  'G',      # flake8-logging-format
+  'N',      # pep8-naming
+  'NPY',    # NumPy-specific rules
+  'PD',     # pandas-vet
+  'PERF',   # perflint
+  'PGH',    # pygrep-hooks
+  'PIE',    # flake8-pie
+  'PL',     # pylint
+  'PT',     # flake8-pytest-style
+  'PTH',    # flake8-use-pathlib
+  'Q',      # flake8-quotes
+  'RET',    # flake8-return
+  'RSE',    # flake8-raise
+  'RUF',    # ruff-specific rules
+  'S',      # flake8-bandit
+  'SIM',    # flake8-simplify
+  'SLOT',   # flake8-slots
+  'TD',     # flake8-todos
+  'TID',    # flake8-tidy-imports
+  'TRY',    # tryceratops
+  'UP',     # pyupgrade
+  'W',      # pycodestyle - Warning
+  'YTT',    # flake8-2020
+]
+# ignored rules
+ignore = [
+  'TD003',    # todos - forced github link to reported bug
+  'PLR0911',  # pylint - too many rerurn statements
+  'PLR0913',  # pylint - too many arguments to function call
+  'PLW0603',  # pylint - don't use global to update global variables
+]
+# enable preview rules
+preview = true
+# show ruff performed fixes
+show-fixes = true
+# show the source code causing the issue
+# show-source = true
+# enable enforcement rules at Python 3.11 level
+target-version = 'py311'
+
+
+[tool.ruff.mccabe]
+# Flag errors (`C901`) whenever the complexity level exceeds 5.
+max-complexity = 15
+
+
+[tool.ruff.format]
+# Prefer single quotes over double quotes.
+quote-style = 'single'
+
+
+[tool.ruff.flake8-quotes]
+inline-quotes = 'single'
+multiline-quotes = 'single'
+
+
+[tool.ruff.pydocstyle]
+# Use Google-style docstrings.
+convention = 'numpy'
+
+
+[tool.pytest.ini_options]
+addopts = [
+    "--import-mode=importlib",
+]
