@@ -133,3 +133,7 @@ dmypy.json
 
 # IDE settings
 .vscode
+
+# misc project test
+NASPA
+words2

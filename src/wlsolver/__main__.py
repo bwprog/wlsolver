@@ -1,31 +1,25 @@
 #!/usr/bin/env python3
-"""wlsolver: a cli tool to solve a word list puzzle.
-
-TODO: guard all print statements from key value error if word list doesn't contain words of that length
-TODO: support non-square boards
-"""
+"""wlsolver: a cli tool to solve a word list puzzle."""
 
 __author__ = 'Brandon Wells'
 __email__ = 'b.w.prog@outlook.com'
 __copyright__ = '© 2023 Brandon Wells'
 __license__ = 'GPL3+'
-__status__ = 'Development'
-__update__ = '2023.10.11'
-__version__ = '0.9.0'
+__status__ = 'Beta'
+__update__ = '2023.11.14'
+__version__ = '0.9.5'
 
 
 from collections.abc import Callable
-from enum import Enum
-from math import sqrt
 from pathlib import Path
 from time import perf_counter
 from typing import Annotated, Optional
 
 import typer
 from rich import box
+from rich.columns import Columns
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import track
 from rich.table import Table
 from rich.traceback import install
 
@@ -35,15 +29,23 @@ DIRECTIONS: set[str] = {'ri', 'dr', 'do', 'dl', 'le', 'ul', 'up', 'ur'}
 BADV: int = 9999
 
 
-# rich enhancements: console output | install provides traceback | (rp) rich print replaces print()
-console = Console()
 install()
-rp: Callable[..., None] = console.print
+con = Console()
+log = Console(quiet=True)
+app: Callable[..., None] = typer.Typer(
+    rich_markup_mode='rich',
+    add_completion=False,
+)
 
+board_epilog: str = (
+    'Examples:\n\n'
+    'wlsolver [violet]tguy-idcq-mngb-pore[/]               -> A standard 4x4 grid: top row tguy, sec row idcq, etc.\n\n'
+    'wlsolver [violet]2yo-ovin-mmew-aosd-2or[/]            -> A board with unplayable blanks: top row __yo, sec row '
+    'ovin, etc.'
+)
 # globally available variables -- they may be updated within functions
 ver: str = f'wlsolver [green]-[/] {__version__} [green]({__update__})[/]'
-global_verb: bool = False
-global_board: int = 0
+global_board: dict[str, int] = {'rows': 0, 'columns': 0}
 global_min_wl: int = 0
 global_max_wl: int = 0
 global_l_word: int = 0
@@ -53,29 +55,8 @@ global_let_dict: dict[str, list[int]] = {}
 global_move_dict: dict[int, list[int]] = {}
 
 
-# ~~~ #     - Class for Method Option -
-class MethodClass(
-        str,
-        Enum,
-):
-    """Choice used by -m/--method Option.
-
-    Parameters
-    ----------
-    str : _type_
-        brute force choice
-    Enum : _type_
-        optimize choices
-    """
-
-    b = 'b'
-    o = 'o'
-
-
 # ~~~ #     - typer callback function -
-def callback_version(
-        version: bool,
-) -> None:
+def callback_version(version: bool) -> None:
     """Print version and exit.
 
     Parameters
@@ -89,14 +70,12 @@ def callback_version(
         normal cleanup and exit after completing request
     """
     if version:
-        rp(f'\n{ver}\n', highlight=False)
+        con.print(f'\n{ver}\n', highlight=False)
         raise typer.Exit
 
 
 # ~~~ #     - typer callback function -
-def callback_letters(
-        letters: str,
-) -> str:
+def validate_letters(letters: str) -> tuple[str, list[list[str]]]:
     """Validate input letters and strip out the hyphens.
 
     Parameters
@@ -115,28 +94,32 @@ def callback_letters(
         value error if letters don't form a square (e.g. 3x3=9)
     """
     # enable global board for updating
-    global global_board, global_let_dict                                                                              # noqa: PLW0602
+    global global_board, global_let_dict  # noqa: PLW0602
+    log.print('[blue]validate_letters[/] entered. [purple]global_board[/] & [purple]global_let_dict[/] imported.')
 
     # create raw letters string by stripping hyphens
-    raw: str = ''.join(x for x in letters if x.isalpha())
+    rows_raw: list[str] = letters.split(sep='-')
+    rows_full: list[list[str]] = []
+    raw: str = ''
+    for i, row in enumerate(iterable=rows_raw):
+        rows_full.append([])
+        for x in row:
+            log.print('for [red]x[/] in [red]letters[/].')
+            if x.isalpha():
+                raw = f'{raw}{x}'
+                rows_full[i].append(x)
+                log.print(f'[red]x[/].isalpha(): |{x}|; raw: |{raw}| rows_full[i]: {rows_full[i]}.')
+            if x.isnumeric():
+                raw = f'{raw}{" " * int(x)}'
+                rows_full[i].extend(list(' ' * int(x)))
+                log.print(f'[red]x[/].isnumeric(): |{x}|; raw: |{raw}| rows_full[i]: {rows_full[i]}.')
 
     # get square root of raw board length as string so we can get specific characters
-    raw_sr: str = str(object=sqrt(len(raw)))
-
-    # update global letter dict where key = unique letter in raw with value = each position the letter is in.
-    for i, letter in enumerate(iterable=raw):
-        if letter in global_let_dict:
-            global_let_dict[letter].append(i)
-        else:
-            global_let_dict[letter] = [i]
-
-    # identify board size and return raw letters or guard against wrong input
-    # ending digit should be 0 if board is square (square root)
-    match raw_sr[-1]:
-        case '0':
-            global_board = int(raw_sr[:-2])
-        case _:
-            rp(Panel(
+    first_row_len: int = len(rows_full[0])
+    for row in rows_full:
+        log.print(f'for row in rows_full: len(row): {len(row)} | first_row_len: {first_row_len}')
+        if len(row) != first_row_len:
+            con.print(Panel(
                 f'Invalid letters entry: [blue]{letters}[/]\n'
                 'Board must be square (e.g. 3x3=9) entered as such: [blue]xxx-xxx-xxx[/]\n'
                 f'Board entered contains [blue]{len(raw)}[/] letters which does not form a square.',
@@ -148,7 +131,26 @@ def callback_letters(
             )
             raise typer.Exit from ValueError
 
-    return raw
+    # update global letter dict where key = unique letter in raw with value = each position the letter is in.
+    for i, letter in enumerate(iterable=raw):
+        log.print(f'for [red]i[/], [red]letter[/] in enumerate(raw): i: {i}; letter: {letter}.')
+        if letter in global_let_dict:
+            global_let_dict[letter].append(i)
+            log.print('[red]i[/] in dict')
+        else:
+            global_let_dict[letter] = [i]
+            log.print('[red]i[/] not in dict; added')
+
+    # identify board size and return raw letters or guard against wrong input
+    # ending digit should be 0 if board is square (square root)
+    # match '0':
+    #     case '0':
+    global_board['rows'] = len(rows_full)
+    global_board['columns'] = first_row_len
+    log.print(f'Global_board: {global_board}.')
+
+    log.print(f'[blue]validate_letters[/] complete. return {raw}, {rows_full}')
+    return raw, rows_full
 
 
 # ~~~ #     - loading words from file function -
@@ -167,24 +169,21 @@ def load_words(
     dict[str | int, set[str]]
         strs are full_words and pruned_words; ints are word lengths
     """
-    # enable global longest word for updating
+    log.print('[blue]load_words[/] started.')
+
     global global_l_word
-    # create the empty return dictionary with the only two str entries
+
     word_dict: dict[str | int, set[str]] = {
         'full_words': set(),
         'pruned_words': set(),
     }
 
-    # open and read file creating set of all words
-    track_full_word_start: float = perf_counter()
     with Path.open(self=words) as f:
         # ensure no new lines and all words are lowercase
         word_dict['full_words'] = {line.strip().lower() for line in f}
-
-    track_full_word_total: float = perf_counter() - track_full_word_start
+        log.print(f'[red]word_dict["full_words"[/] loaded with all words from {words}')
 
     # Add sets with word length keys to dict and populate with words
-    track_word_sep_start: float = perf_counter()
     for word in word_dict['full_words']:
         # using the standard count from 0 so subtracting 1 from word length to keep standard
         wl: int = len(word) - 1
@@ -200,32 +199,8 @@ def load_words(
                         word_dict[wl] = {word}
                         word_dict['pruned_words'].add(word)
 
-    track_word_sep_total: float = perf_counter() - track_word_sep_start
-
     # update global longest word
     global_l_word = max(a for a in word_dict if isinstance(a, int)) + 1
-    # generate length variables only used for printing to Words Panel
-    len_fw: int = len(word_dict['full_words'])
-    len_pw: int = len(word_dict['pruned_words'])
-    len_min: int = len(word_dict[global_min_wl - 1])
-    len_max: int = len(word_dict[global_l_word - 1])
-    len_wd: int = len([b for b in word_dict if isinstance(b, int)])
-
-    # print words and pruning to Words Panel
-    if global_verb:
-        rp(Panel(
-            f'Total Word Set from File: [green]{len_fw:,} Words[/] ([green]{track_full_word_total:.4f}[/]s)\n'
-            f'Pruned [green]{len_fw - len_pw:,}[/] words (too short/long) and separated by length ([green]'
-            f'{track_word_sep_total:.4f}[/]s)\n'
-            f'Pruned Word Set: [green]{len_pw:,}[/] ([green]{len_wd}[/] word lengths)\n'
-            f'Total Min/Max [green]{global_min_wl}[/]/[green]{global_l_word}[/] Words: ([green]{len_min:,}[/]/[green]'
-            f'{len_max:,}[/])',
-            title='Words',
-            title_align='left',
-            border_style='green',
-            highlight=False,
-            ),
-        )
 
     return word_dict
 
@@ -233,6 +208,7 @@ def load_words(
 # ~~~ #     - input word list letters function -
 def display_letters(
         letters: str,
+        rows_full: list[list[str]],
 ) -> dict[str, str]:
     """Display a Word List Table and return a dict of the letters.
 
@@ -247,15 +223,14 @@ def display_letters(
         raw = letters; raw_len = total number of letters; unique = unique letters
     """
     # Display word list block as table
-    wl_table = Table(title=f'Word List Table ({global_board}x{global_board})', box=box.HEAVY, show_header=False)
-    for _ in range(global_board):
+    wl_table = Table(box=box.ROUNDED, show_header=False, show_lines=True)
+    for _ in range(global_board['columns']):
         wl_table.add_column(justify='center', style='green', no_wrap=True)
 
-    for i in range(global_board):
-        temp_list: list[str] = list(letters[(i * global_board):((i + 1) * global_board)])
-        wl_table.add_row(*temp_list)
+    for row in rows_full:
+        wl_table.add_row(*row)
 
-    rp(wl_table)
+    con.print(wl_table)
 
     # build and return dict of raw letters and length
     return {
@@ -288,7 +263,7 @@ def valid_mover(
         9999 if bad move, otherwise the valid digit the move landed on
     """
     # create j (board square size), and k (full board size -1 due to start from 0 counting)
-    j: int = global_board
+    j: int = global_board['columns']
     k: int = (j * j) - 1
     # match i to a direction and if valid return digit, otherwise return BADV since board is square and start
     # counting from 0, left row contains digits divisible by board square size allowing this code to work for
@@ -322,16 +297,12 @@ def move_dict_builder() -> None:
     The global_move_dict is used by the Optimized function to identify valid moves.
     """
     global global_move_dict
-    k: int = (global_board * global_board)
+    k: int = (global_board['columns'] * global_board['rows'])
     # pre-populate the dictionary with an integer key for every spot on the board
     global_move_dict = {key: [] for key in range(k)}
     # build all possible 1-step moves using the starting point as key and a list of integers as the valid move options
     # if verbose, show progress bar (doesn't take long but visually shows step)
-    for dir_list in track(
-        sequence=global_move_dict,
-        total=len(global_move_dict),
-        disable=(not global_verb),
-    ):
+    for dir_list in global_move_dict:
         # iterate through the 8 way directions
         for j in DIRECTIONS:
             # get last entry in sub-list and send off with direction to get move digit
@@ -344,160 +315,8 @@ def move_dict_builder() -> None:
                     global_move_dict[dir_list].append(ret_dir)
 
 
-# ~~~ #     - brute force direction builder -
-def move_builder() -> dict[int, list[list[int]]]:
-    """Recursively go through all possible moves on the board building a dictionary.
-
-    This is used by the brute_force function to generate lists of all possible moves.
-
-    Returns
-    -------
-    dict[int, list[list[int]]]
-        key is the length of each entry in the sub list
-    """
-    k: int = (global_board * global_board)
-
-    # build all possible list in dict
-    move_dict: dict[int, list[list[int]]] = {key: [] for key in range(k)}
-    # build dict of all possible moves; if verbose, show progress bar
-    for md_list in track(
-        sequence=move_dict,
-        total=len(move_dict),
-        disable=(not global_verb),
-    ):
-        match md_list:
-            # first level move, we build initial entry with one item per board tile
-            case 0:
-                for i in range(k):
-                    move_dict[0].append([i])
-            # all others from 1 to one less than max word length (count from 0) build off previous
-            case v if 1 <= v < global_max_wl:
-                # iterate through each sub list in previous built top list
-                for ll in move_dict[md_list - 1]:
-                    # iterate through the 8 way directions
-                    for j in DIRECTIONS:
-                        # get last entry in sub-list and send off with direction to get move digit
-                        ret_dir: int = valid_mover(i=ll[-1], direction=j)
-                        # guard against bad move with 9999 and unique entry as spaces can only be used once
-                        match ret_dir != BADV and ret_dir not in ll:
-                            case True:
-                                # append current top list with unpacked sub list of previous top list's sublist
-                                # and add the new valid entry to the end of the sublist
-                                move_dict[md_list].append([*ll, ret_dir])
-
-    # sum the total sub-lists of the top lists
-    total_moves: int = sum(len(move_dict[i]) for i in move_dict)
-
-    # if verbose, show the Move Panel stats
-    if global_verb:
-        rp(Panel(
-            f'Total Moves Calculated: [green]{total_moves:,}[/]\n'
-            f'Valid [green]{global_min_wl}[/] Letter Moves: [green]{len(move_dict[(global_min_wl - 1)]):,}[/]',
-            title='Brute Force Move Builder',
-            title_align='left',
-            border_style='green',
-            highlight=False,
-            ),
-        )
-
-    return move_dict
-
-
-# ~~~ #     - brute force the final word list -
-def brute_force(
-        a_word_dict: dict[str | int, set[str]],
-        letters_dict: dict[str, str],
-) -> dict[int, set[str]]:
-    """Brute Force method to derive all possible words.
-
-    Parameters
-    ----------
-    a_word_dict : dict[str  |  int, set[str]]
-        contains all real words
-    letters_dict : dict[str, str]
-        contains the letters on the board
-
-    Returns
-    -------
-    dict[int, set[str]]
-        contains all playable words using word length as key
-    """
-    # print different progress if verbose or not
-    if global_verb:
-        rp('Brute Force: Calculate all possible moves')
-    else:
-        rp('Working...')
-    # generate available moves
-    bf_moves: dict[int, list[list[int]]] = move_builder()
-
-    # generate dicts to hold the final return data and the intermediate set
-    final_words: dict[int, set[str]] = {}
-    int_sets: dict[int, set[str]] = {key: set() for key in range((global_min_wl - 1), global_max_wl)}
-
-    if global_verb:
-        rp('Brute Force: Transform moves into possible words')
-    # convert the list of integers of possible moves into sets of letters and show progress
-    for moves in track(
-        sequence=bf_moves,
-        total=len(bf_moves),
-        disable=(not global_verb),
-    ):
-        match moves:
-            # guard min/max word length
-            case v if (global_min_wl - 1) <= v <= global_max_wl:
-                # iterate through each sublist
-                for ll in bf_moves[moves]:
-                    # convert list of int to letters and add to set of word length use of set here eliminates
-                    # multiple pathways forming the same word
-                    int_sets[v].add(''.join(letters_dict['raw'][i] for i in ll))
-
-    # sum the total possible words and display if verbose
-    if global_verb:
-        total_p_moves: int = sum(len(int_sets[i]) for i in int_sets)
-        rp(Panel(
-            f'Total Possible Words: [green]{total_p_moves:,}[/]\n'
-            f'Possible [green]{global_min_wl}[/] Letter words: [green]{len(int_sets[global_min_wl - 1]):,}[/]',
-            title='Possible Words',
-            title_align='left',
-            border_style='green',
-            highlight=False,
-            ),
-        )
-
-    if global_verb:
-        rp('Brute Force: Match real words to possible words')
-    # merge & keep like entries in word sets, creating set only if it contains at least one word
-    for i_set in track(
-        sequence=int_sets,
-        total=len(int_sets),
-        disable=(not global_verb),
-    ):
-        if len(x := a_word_dict[i_set] & int_sets[i_set]) > 0:
-            final_words[i_set] = x
-
-    # sum the total real words and display if verbose
-    if global_verb:
-        total_words: int = sum(len(final_words[i]) for i in final_words)
-        # guard against key not in dict meaning 0 words
-        tmp_fw: int = len(final_words[global_min_wl - 1]) if (global_min_wl - 1) in final_words else 0
-        rp(Panel(
-            f'Total Real Words: [green]{total_words:,}[/]\n'
-            f'Real [green]{global_min_wl}[/] Letter words: [green]{tmp_fw:,}[/]',
-            title='Real Words',
-            title_align='left',
-            border_style='green',
-            highlight=False,
-            ),
-        )
-
-    # uncomment following line to view local variables for troubleshooting
-    # console.log('optimized function', log_locals=True)
-
-    return final_words
-
-
 # ~~~ #     - Optimized solver -
-def optimized(                                                                          # noqa: C901 PLR0912 PLR0915
+def optimized(
         a_word_dict: dict[str | int, set[str]],
         letters_dict: dict[str, str],
 ) -> dict[int, set[str]]:
@@ -516,10 +335,6 @@ def optimized(                                                                  
         contains all playable words using word length as key
     """
     # print different progress if verbose or not
-    if global_verb:
-        rp('Optimized: Trimming Words with invalid letters')
-    else:
-        rp('Working...')
     raw: str = letters_dict['raw']
 
     # generate dicts to hold the final and intermediate return data, pre-building intermediate with all possible keys
@@ -534,11 +349,7 @@ def optimized(                                                                  
     temp_words: dict[int, list[str]] = {}
     # iterate through all words discarding any that contain letters not on the game board
     # word_set_key and word_set_value top level in the dictionary: e.g. 3: {bike, ants}
-    for w_set_k, w_set_v in track(
-        sequence=b_word_dict.items(),
-        total=len(b_word_dict),
-        disable=(not global_verb),
-    ):
+    for w_set_k, w_set_v in b_word_dict.items():
         # iterated through all words in the set
         for word in w_set_v:
             # iterate through each letter of the word
@@ -556,30 +367,10 @@ def optimized(                                                                  
             # reset the invalid word flag for use on next word
             invalid_word = False
 
-    # sum the total possible words and display if verbose
-    if global_verb:
-        total_p_moves: int = sum(len(temp_words[i]) for i in temp_words)
-        rp(Panel(
-            f'Total Possible Words: [green]{total_p_moves:,}[/]\n'
-            f'Possible [green]{global_min_wl}[/] Letter words: [green]{len(temp_words[global_min_wl - 1]):,}[/]',
-            title='Possible Words',
-            title_align='left',
-            border_style='green',
-            highlight=False,
-            ),
-        )
-
-    # print different progress if verbose
-    if global_verb:
-        rp('Optimized: Calculating Valid Words')
     # valid word flag used to guard against an invalid move
     invalid_move: bool = False
     # iterate through all words in the new temp_words dictionary that was pruned of invalid words
-    for w_set_k, w_set_v in track(
-        sequence=temp_words.items(),
-        total=len(temp_words),
-        disable=(not global_verb),
-    ):
+    for w_set_k, w_set_v in temp_words.items():
         # word level loop
         for word in w_set_v:
             # intermediate dict builds up the word with list of lists of valid moves: word: hat; board has 2 h, 2 a, 1 t
@@ -639,55 +430,32 @@ def optimized(                                                                  
         if len(inter_words[i_set]) > 0:
             final_words[i_set] = inter_words[i_set]
 
-    # sum the total real words and display if verbose
-    if global_verb:
-        total_words: int = sum(len(final_words[i]) for i in final_words)
-        # guard against key not in dict meaning 0 words
-        tmp_fw: int = len(final_words[global_min_wl - 1]) if (global_min_wl - 1) in final_words else 0
-        rp(Panel(
-            f'Total Real Words: [green]{total_words:,}[/]\n'
-            f'Real [green]{global_min_wl}[/] Letter words: [green]{tmp_fw:,}[/]',
-            title='Real Words',
-            title_align='left',
-            border_style='green',
-            highlight=False,
-            ),
-        )
-
-    # uncomment following line to view local variables for troubleshooting
-    # console.log('optimized function', log_locals=True)
-
     return final_words
 
 
 # ~~~ #     - CLI variables are here in main for typer -
-def main(                                                                                               # noqa: D103
-        letters: Annotated[str, typer.Option(
-            ...,
-            '--letters',
-            '-l',
-            prompt=True,
-            callback=callback_letters,
-            help='Enter the game board rows of letters separated by hyphens. e.g. xxx-xxx-xxx',
+@app.command(epilog=board_epilog)
+def board(
+        letters: Annotated[str, typer.Argument(
+            rich_help_panel='[red]letters',
+            help=('Enter rows of [red]LETTERS[/] separated by hyphens; use a whole number to indicate the number '
+                'of blank, unplayable spaces before the next letter.'),
         )] = '',
-        minimum: Annotated[int, typer.Option(
+        flag_log: Annotated[bool, typer.Option(
+            '--log',
+            help='Print a [blue]log[/] of steps taken; only useful for troubleshooting or learning.',
+        )] = False,
+        flag_minimum: Annotated[int, typer.Option(
             '--minimum',
             '-n',
-            help='Shortest word length',
+            help='[blue]Minimum[/] word length',
         )] = 4,
-        maximum: Annotated[int, typer.Option(
+        flag_maximum: Annotated[int, typer.Option(
             '--maximum',
             '-x',
-            help='Longest word length',
-        )] = 10,
-        method: Annotated[MethodClass, typer.Option(
-            '--method',
-            '-m',
-            case_sensitive=False,
-            show_default=False,
-            help='solving method: (b)rute force or (o)ptimized [default: o]',
-        )] = MethodClass.o,
-        words: Annotated[Path, typer.Option(
+            help='[blue]Maximum[/] word length',
+        )] = 16,
+        flag_words: Annotated[Path, typer.Option(
             '--words',
             '-w',
             exists=True,
@@ -695,96 +463,83 @@ def main(                                                                       
             dir_okay=False,
             readable=True,
             resolve_path=True,
-            help='Word list file to use',
+            help='Word list [flue]FILE[/] to use',
         )] = global_default_path,
-        verbose: Annotated[bool, typer.Option(
-            '--verbose',
-            '-v',
-            help='Print calculation details',
-        )] = False,
-        version: Annotated[Optional[bool] | None, typer.Option(                                         # noqa: UP007
-            '--version',
+        flag_version: Annotated[Optional[bool] | None, typer.Option(
+            default='--version',
             is_eager=True,
             callback=callback_version,
-            help='Print version and exit.',
+            help='Print version and exit',
         )] = None,
 ) -> None:
-
+    """Calculate playable words."""
     # enable global variable updating
-    global global_verb, global_min_wl, global_max_wl, global_mov_solve
+    log.quiet = not flag_log
+    global global_min_wl, global_max_wl
 
-    # adjust globals per CLI input
-    global_verb = verbose
+    log.print('[blue]board[/] log started. [purple]global_min_wl[/] & [purple]global_max_wl[/] imported.')
+    raw_letters: str = ''
+    rows_full: list[list[str]] = []
+    raw_letters, rows_full = validate_letters(letters=letters)
     # guard against word size less than 2 letters
-    global_min_wl = minimum if minimum > 1 else 2
+    global_min_wl = flag_minimum if flag_minimum > 1 else 2
     # guard against impossible word lengths longer than the board
-    global_max_wl = maximum if maximum <= (global_board * global_board) else (global_board * global_board)
-    global_mov_solve = method
+    global_max_wl = (
+        flag_maximum if flag_maximum <= (global_board['columns'] * global_board['rows'])
+        else (global_board['columns'] * global_board['rows'])
+    )
 
     # Initial output of the program name and version
-    rp(f'\n{ver}\n', highlight=False)
+    con.print(f'\n{ver}\n', highlight=False)
 
     # create dict of valid next moves and update the global_dict_move variable
     move_dict_builder()
-    # uncomment to view possible moves
-    # rp(global_move_dict)
 
-    # load the list of words
-    if global_verb:
-        rp(f'Attempting to load: {words}')
-
-    word_dict: dict[str | int, set[str]] = load_words(words=words)
+    word_dict: dict[str | int, set[str]] = load_words(words=flag_words)
 
     # display word list letters from user
-    letters_dict: dict[str, str] = display_letters(letters=letters)
+    letters_dict: dict[str, str] = display_letters(letters=raw_letters, rows_full=rows_full)
 
     # option to pic solving method style; _ is there only for IDE error without
-    match method:
-        case 'b':
-            wl_words: dict[int, set[str]] = brute_force(
-                a_word_dict=word_dict,
-                letters_dict=letters_dict,
-            )
-        case 'o':
-            wl_words: dict[int, set[str]] = optimized(
-                a_word_dict=word_dict,
-                letters_dict=letters_dict,
-            )
-        case _:
-            raise typer.Exit from ValueError
+    wl_words: dict[int, set[str]] = optimized(
+        a_word_dict=word_dict,
+        letters_dict=letters_dict,
+    )
 
     # Generate panels for valid word lengths and print them
-    rp('Word Lists')
+    word_panels: list[Panel] = []
+    con.print('Word Lists')
     for i in wl_words:
         cw: list = []
         # populate colored word list with alternating words being colored blue
         for y, z in enumerate(iterable=sorted(wl_words[i])):
             cw.append(f'[blue]{z}[/]' if y % 3 == 1 else z)
 
-        rp(Panel(
-            ', '.join(cw),
-            title=f'[bold white]{i + 1}[/] Letter Words: [bold white]{len(cw)}[/]',
+        word_panels.append(Panel(
+            renderable=', '.join(cw),
+            title=f'[blue]{i + 1}[/] [default]Letter Words:[/] [orange1]{len(cw)}[/]',
             title_align='left',
             border_style='green',
             highlight=False,
+            expand=False,
             ),
         )
+    columns: Columns = Columns(renderables=word_panels, padding=(1, 1), width=40)
+    con.print(columns)
 
-    # exit the app
     prog_time_total: float = perf_counter() - PROG_TIME_START
-    rp(Panel(
-        f'([green]{prog_time_total:.4f}[/]s)',
-        title='[bold white]:glowing_star: Complete :glowing_star:[/]',
+    con.print(Panel(
+        f'([blue]{prog_time_total:.4f}[/]s)',
+        title='[default]🌟 Complete 🌟[/]',
         title_align='left',
         border_style='green',
         highlight=False,
+        expand=False,
         ),
     )
-    raise typer.Exit
 
 
 # ~~~ #
 if __name__ == '__main__':
 
-    # use typer to build cli arguments off main variables
-    typer.run(function=main)
+    app()
