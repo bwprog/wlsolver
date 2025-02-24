@@ -1,0 +1,112 @@
+[project]
+name = "wlsolver"
+description = "A cli tool to solve a word list puzzle."
+readme = "README.rst"
+requires-python = ">=3.13"
+license = {file = 'LICENSE'}
+dynamic = ['version']
+authors = [
+  {name = "Brandon Wells", email = "b.w.prog@outlook.com"}
+]
+dependencies = [
+    "rich>=13.9.4",
+    "typer>=0.15.1",
+]
+
+[project.urls]
+Home = "https://github.com/bwprog"
+
+[project.scripts]
+wlsolver = "wlsolver:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/wlsolver/__about__.py"
+
+[tool.ruff]
+# Increase the maximum line length to 120 characters.
+line-length = 120
+indent-width = 4
+# Exclude directories
+exclude = [
+  ".pytest_cache",
+  ".ruff_cache",
+  ".vscode",
+  ".git",
+]
+# enable enforcement rules at Python 3.13 level
+target-version = "py313"
+# show ruff performed fixes
+show-fixes = true
+
+[tool.ruff.lint]
+# enforced rules
+select = ["ALL"]
+# ignored rules
+ignore = [
+  "ARG001",   # unused arguments - Typer args are of this type
+  "CPY",      # flake8-copyright notice - insists on copyright notice at top of file
+  "FBT001",   # boolean default positional argument -- seems wonky
+  "FBT002",   # boolean default positional argument -- seems wonky
+  # "PLR0911",  # pylint - too many return statements
+  # "PLR0913",  # pylint - too many arguments to function call
+  # "PLR2004",  # pylint - don't use magic variable, define as CONSTANT and use that
+  "PLW0603",  # pylint - don"t use global to update global variables
+  "RET505",   # flake8-return - else after return -- too dumb to understand multiple elif
+  "TD003",    # todos - forced github link to reported bug
+  "UP007",    # pyupgrade - Typer doesn't support | unions yet
+  "W391",     # pycodestyle - incorrectly flags last line of file
+]
+# enable preview rules
+preview = true
+
+# ignore missing docstring in empty __init__.py
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["D104"]
+
+[tool.ruff.format]
+# Prefer single quotes over double quotes.
+quote-style = "single"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+preview = true
+
+[tool.ruff.lint.mccabe]
+# Flag errors (`C901`) whenever the complexity level exceeds 25.
+max-complexity = 25
+
+[tool.ruff.lint.flake8-quotes]
+# Prefer single quotes over double quotes.
+inline-quotes = "single"
+multiline-quotes = "single"
+
+[tool.ruff.lint.pydocstyle]
+# Use numpy-style docstrings.
+convention = "numpy"
+
+[tool.ruff.lint.pylint]
+# PLR0911 - affects match-case simple returns
+max-returns = 12
+# PLR0915 - affects adding log statements throughout
+max-statements = 75
+# PLR0913 - typer uses function args, need to bump this way up
+max-args = 30
+# PLR0912 - max number of branches for function or method
+max-branches = 25
+# PLR1702 - max number of nested if blocks (default 5)
+max-nested-blocks = 10
+
+[tool.pytest.ini_options]
+addopts = [
+    "--import-mode=importlib",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.4",
+    "ruff>=0.9.7",
+]
