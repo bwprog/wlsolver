@@ -644,7 +644,7 @@ a { text-decoration: none; }
 <li><p>For 'that', it starts with 't' as a key and creates a list of a list of 't' positions (e.g. spot 14).</p></li>
 <li><p>Then it finds the 'h' (spot 13) and confirms it is a valid move from spot 14 creating a 'th' key with a list of [14, 13].</p></li>
 <li><p>It moves to an 'a' (spot 9) which is also valid, creating a 'tha' key with [14, 13, 9].</p></li>
-<li><p>Finally, it finds one 't' (spot 14), but is prevented from adding a duplicate letter breaking the loop as an unplayable word.</p></li>
+<li><p>Finally, it finds one 't' (spot 14), but is prevented from adding a duplicate spot (14) breaking the loop as an unplayable word.</p></li>
 <li><p>Lists of lists are used  as letters may be on the board in multiple spots with multiple pathways to make a valid word.</p></li>
 </ol>
 </section>
@@ -673,6 +673,16 @@ a { text-decoration: none; }
 <p><span class="docutils literal">uv sync</span></p>
 <p><span class="docutils literal">python ./src/wlsolver &lt;board&gt;</span></p>
 </section>
+</section>
+<hr class="docutils" />
+<section id="todo">
+<h3>TODO</h3>
+<ul class="simple">
+<li><p>Create pytest tests for validation.</p></li>
+<li><p>Refactor output code to not be disrupted by --log option.</p></li>
+<li><p>Refactor code to eliminate writing to global variables.</p></li>
+<li><p>Add verbose logging for use with small word lists to output during large iterations.</p></li>
+</ul>
 </section>
 </section>
 </main>
